@@ -110,9 +110,49 @@ class ThinkFilter:
         return rest
 
 
+ROUTER_PREFIX = "openrouter/"
+
+
+def must_think(model_id: str, info: dict[str, Any] | None = None) -> bool:
+    """True if the model can't be told to skip its hidden reasoning.
+
+    That is the case when OpenRouter marks its reasoning ``mandatory`` (it rejects
+    ``effort: "none"``), when its supported efforts don't include "none", and for
+    routers (openrouter/free), which may hand the request to such a model.
+    """
+    if model_id.startswith(ROUTER_PREFIX):
+        return True
+    reasoning = (info or {}).get("reasoning")
+    if not isinstance(reasoning, dict):
+        return False  # not a reasoning model
+    if reasoning.get("mandatory"):
+        return True
+    efforts = reasoning.get("supported_efforts")
+    return bool(efforts) and "none" not in efforts
+
+
+def plan_groups(chain: list[str], info: dict[str, dict[str, Any]], size: int) -> list[tuple[list[str], bool]]:
+    """Split the chain into OpenRouter fallback groups of at most ``size`` models.
+
+    One request carries one ``reasoning`` setting for its whole group, so models that
+    must think never share a group with models that are told not to.
+    Returns ``(models, must_think)`` pairs in chain order.
+    """
+    groups: list[tuple[list[str], bool]] = []
+    for mid in chain:
+        thinks = must_think(mid, info.get(mid))
+        if groups and groups[-1][1] == thinks and len(groups[-1][0]) < max(1, size):
+            groups[-1][0].append(mid)
+        else:
+            groups.append(([mid], thinks))
+    return groups
+
+
 def rank_free_models(models: list[dict[str, Any]], preferred: list[str]) -> list[str]:
-    """Return usable free model ids, preferred ones first (in configured order)."""
+    """Return usable free model ids: preferred ones first (in configured order), then
+    the rest; models that must think go after all others, and the router comes last."""
     candidates: dict[str, tuple[int, float]] = {}
+    info: dict[str, dict[str, Any]] = {}
     for model in models:
         mid = str(model.get("id") or "")
         if not (mid.endswith(":free") or mid == "openrouter/free"):
@@ -130,13 +170,17 @@ def rank_free_models(models: list[dict[str, Any]], preferred: list[str]) -> list
         if sizes and size < 7:
             continue
         candidates[mid] = (ctx, size)
-    ranked = [m for m in preferred if m in candidates]
+        info[mid] = model
+    ranked = [m for m in preferred if m in candidates and m != "openrouter/free"]
     rest = sorted(
         (m for m in candidates if m not in ranked and m != "openrouter/free"),
         key=lambda m: (-(candidates[m][1] or 30.0), -candidates[m][0], m),
     )
     ranked += rest
-    if "openrouter/free" in candidates and "openrouter/free" not in ranked:
+    # Thinking models answer slower and can run out of tokens: last resort only.
+    thinkers = [m for m in ranked if must_think(m, info[m])]
+    ranked = [m for m in ranked if m not in thinkers] + thinkers
+    if "openrouter/free" in candidates:
         ranked.append("openrouter/free")
     return ranked
 
@@ -165,6 +209,7 @@ class OpenRouterClient:
         self._semaphore = asyncio.Semaphore(max(1, settings.llm_max_concurrency))
         self._chain: list[str] = []
         self._chain_at = 0.0
+        self._model_info: dict[str, dict[str, Any]] = {}  # id -> /models entry (reasoning capabilities)
         self._chain_lock = asyncio.Lock()
         self.quota_exhausted_until: datetime | None = None
         self.last_model: str | None = None
@@ -195,9 +240,11 @@ class OpenRouterClient:
                 try:
                     resp = await self._http.get("/models", timeout=20.0)
                     resp.raise_for_status()
-                    ranked = rank_free_models(resp.json().get("data") or [], preferred)
+                    roster = [m for m in resp.json().get("data") or [] if isinstance(m, dict)]
+                    ranked = rank_free_models(roster, preferred)
                     if ranked:
                         chain = ranked
+                        self._model_info = {str(m.get("id")): m for m in roster if m.get("id") in ranked}
                     log.info("free model roster refreshed", extra={"available": len(ranked), "top": ranked[:5]})
                 except (httpx.HTTPError, ValueError) as exc:
                     log.warning("model discovery failed; using configured list", extra={"error": repr(exc)[:200]})
@@ -228,6 +275,8 @@ class OpenRouterClient:
         return {
             "configured": self.configured,
             "model_chain": self._chain[:6],
+            # Models that can't skip hidden reasoning: tried last, with extra tokens.
+            "thinking_models": [m for m in self._chain if must_think(m, self._model_info.get(m))][:6],
             "last_model": self.last_model,
             "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
             "last_error": self.last_error,
@@ -246,20 +295,22 @@ class OpenRouterClient:
     async def stream_chat(self, messages: list[dict[str, str]], result: StreamResult) -> AsyncIterator[str]:
         self._check_available()
         chain = await self.refresh_models()
-        size = max(1, self.settings.llm_models_per_request)
-        groups = [chain[i : i + size] for i in range(0, len(chain), size)][: self.settings.llm_max_attempts]
+        groups = plan_groups(chain, self._model_info, self.settings.llm_models_per_request)
+        groups = groups[: self.settings.llm_max_attempts]
         last_error = "no models available"
         async with self._semaphore:
-            for attempt, group in enumerate(groups):
+            for attempt, (group, thinks) in enumerate(groups):
                 result.attempts = attempt + 1
                 result.tried.extend(group)
+                result.finish_reason = None
                 yielded = False
                 try:
-                    async for delta in self._stream_once(group, messages, result):
+                    async for delta in self._stream_once(group, messages, result, thinks=thinks):
                         yielded = True
                         yield delta
                     if not yielded:
-                        raise _Transient("empty completion")
+                        why = " (token limit reached while the model was thinking)" if result.finish_reason == "length" else ""
+                        raise _Transient("empty completion" + why)
                     self.last_model = result.model
                     self.last_success_at = datetime.now(UTC)
                     self.last_error = None
@@ -281,22 +332,36 @@ class OpenRouterClient:
                         await asyncio.sleep(min(1.5 * (attempt + 1), 4.0))
         raise LLMUnavailable(last_error)
 
-    async def _stream_once(
-        self, models: list[str], messages: list[dict[str, str]], result: StreamResult
-    ) -> AsyncIterator[str]:
-        payload = {
+    def _payload(self, models: list[str], messages: list[dict[str, str]], *, thinks: bool) -> dict[str, Any]:
+        """Hidden reasoning shares ``max_tokens`` with the answer, so a model that thinks
+        on a tight budget can return nothing. Models that can skip it are told to
+        (faster, and the whole budget goes to the answer); models that must think get
+        headroom for thinking *and* the answer. Reasoning text is never returned."""
+        if thinks:
+            reasoning: dict[str, Any] = {"exclude": True}
+            max_tokens = self.settings.llm_max_tokens + self.settings.llm_thinking_headroom_tokens
+        else:
+            reasoning = {"effort": "none", "exclude": True}
+            max_tokens = self.settings.llm_max_tokens
+        return {
             "model": models[0],
             "models": models,
             "messages": messages,
             "stream": True,
             "temperature": self.settings.llm_temperature,
-            "max_tokens": self.settings.llm_max_tokens,
-            "reasoning": {"exclude": True},
+            "max_tokens": max_tokens,
+            "reasoning": reasoning,
             "usage": {"include": True},  # real prompt/completion token counts in the last chunk
         }
+
+    async def _stream_once(
+        self, models: list[str], messages: list[dict[str, str]], result: StreamResult, *, thinks: bool = False
+    ) -> AsyncIterator[str]:
+        payload = self._payload(models, messages, thinks=thinks)
         think = ThinkFilter()
         started = time.monotonic()
-        deadline = self.settings.llm_first_token_timeout_s
+        # Thinking happens before the first visible token: allow it more time.
+        deadline = self.settings.llm_thinking_first_token_timeout_s if thinks else self.settings.llm_first_token_timeout_s
         answered = False
         async with self._http.stream("POST", "/chat/completions", json=payload, headers=self._auth()) as resp:
             if resp.status_code != 200:

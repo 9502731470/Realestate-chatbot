@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     llm_connect_timeout_s: float = 10.0
     llm_read_timeout_s: float = 45.0
     llm_first_token_timeout_s: float = 30.0  # fail over if a model hasn't started answering
+    # On OpenRouter, a model's hidden "thinking" counts against max_tokens, so a model
+    # that thinks can spend the whole answer budget and return an empty answer. Models
+    # that can skip thinking are told to (reasoning effort "none"); models that must
+    # think, and the openrouter/free router, get this many extra tokens and more time.
+    llm_thinking_headroom_tokens: int = 3300
+    llm_thinking_first_token_timeout_s: float = 60.0
     llm_max_concurrency: int = 4
     llm_model_refresh_hours: float = 6.0
 

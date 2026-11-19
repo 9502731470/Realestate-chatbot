@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.4 — Fix: empty answers from "thinking" models
+
+- On OpenRouter, a model's hidden reasoning counts against `max_tokens`. Requests sent 700 tokens with
+  `reasoning: {"exclude": true}`, which hides the thinking but doesn't stop it, so models that think by default
+  (Nemotron Ultra at "high" effort, Ling) or must think (Ernie, often picked by `openrouter/free`) used the whole
+  budget and streamed nothing. The chat then fell back to a plain list ("all free models are busy or unavailable").
+- Models that can skip thinking are now told to (`effort: "none"`): faster, and the whole budget goes to the answer.
+  Models that must think (OpenRouter's `reasoning.mandatory`, or no "none" effort) and the `openrouter/free` router
+  are tried last, never in the same request as the others, with 3,300 extra tokens and 60 s for the first word
+  (`LLM_THINKING_HEADROOM_TOKENS`, `LLM_THINKING_FIRST_TOKEN_TIMEOUT_S`).
+- An empty answer now says when the token limit ran out during thinking; `/api/stats` → `llm.thinking_models`
+  lists the models that must think.
+- 14 new tests (241 in total), using OpenRouter's live reasoning metadata; on the previous code they fail.
+
 ## 1.3.3 — Fixes from testing the live deployment
 
 - **City names mistaken for districts.** "Riyadh" also matched a district called Al-Riyadh in Jeddah, so
