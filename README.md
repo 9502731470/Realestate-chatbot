@@ -12,13 +12,13 @@ short_description: RAG chatbot over public DarGlobal & Wasalt property data
 
 # DarGlobal × Wasalt Property Assistant
 
-A production-style **retrieval-augmented chatbot** that answers questions about
+A Docker-ready **retrieval-augmented chatbot** that answers questions about
 **DarGlobal** projects (darglobal.co.uk) and **Wasalt** property listings
 (wasalt.sa), using **only data scraped from their public pages**, with a free
-LLM served through **OpenRouter**, packaged as a **Docker** image and deployed
-as a live web app.
+LLM served through **OpenRouter**. This repository includes a Render Blueprint;
+a public service must be deployed separately.
 
-- **Live app:** deploy with [`DEPLOY.md`](DEPLOY.md) (Render free tier: `https://<name>.onrender.com`)
+- **Deployment:** follow [`DEPLOY.md`](DEPLOY.md) to create a Render service; no public URL is configured yet.
 - **API docs (OpenAPI):** `/docs` · **Data & model status:** `/api/stats` · **Metrics:** `/metrics`
 
 Ask in English or Arabic, for example:
@@ -75,7 +75,7 @@ That matters because OpenRouter's free tier allows **50 requests/day**
 | --- | --- | --- |
 | Discovery | `sitemap.xml` + `/projects` index | official category sitemap (8.6k category pages) |
 | Extraction | `__NEXT_DATA__` JSON (the exact data the page renders) | `__NEXT_DATA__` of category pages (32 structured listings each), listing/project detail pages, WordPress REST API for the blog |
-| Content | 42 projects (location, unit types, sizes, status, completion, amenities, nearby landmarks with travel times, FAQs, payment notes), blog, press, insights, FAQ | listings (price, rent period, beds, baths, area, district, furnishing, amenities, verification), projects, market counts, FAQs, city guides, buying guides |
+| Content | 24 projects in the current snapshot (location, unit types, sizes, status, completion, amenities, nearby landmarks with travel times, FAQs, payment notes), blog, press, insights, FAQ | listings (price, rent period, beds, baths, area, district, furnishing, amenities, verification), projects, market counts, FAQs, city guides, buying guides |
 | Rate | 2 concurrent, ≥ 0.5 s apart | strictly sequential, ≥ 1 s apart ("moderate", per `llms.txt`) |
 | Rules honoured | robots.txt (incl. wildcards, Crawl-delay) | robots.txt: **`/search` is never called**; `llms.txt`: no contact details, attribution, link to the live site |
 
@@ -127,7 +127,7 @@ That matters because OpenRouter's free tier allows **50 requests/day**
 | Security | Strict CSP (no third-party scripts, fonts or CDNs), `nosniff`, referrer policy, non-root container (uid 1000), secrets only from env, no stack traces to clients |
 | Latency | Streaming SSE with keep-alives; 30 s first-token deadline with fail-over to the next free model; per-intent answer length caps; measured time-to-first-token and real token usage per answer |
 | Observability | JSON logs with request IDs (user text is not logged by default), Prometheus `/metrics`, `/api/health` (liveness), `/api/ready` (readiness), `/api/stats` (data coverage, crawl reports, model chain, remaining free quota) |
-| Quality | 163 offline tests: parsers against payloads shaped like the live sites served over gzip like the real servers, PII leak checks, robots compliance, crawl failure modes, retrieval, vector database (persistence, SQL/Chroma filter equivalence over 300 random filters, agreement with exact search), LLM fallback and quota logic, API contract (SSE) |
+| Quality | 180 offline tests: parsers against payloads shaped like the live sites served over gzip like the real servers, PII leak checks, robots compliance, crawl failure modes, retrieval, vector database (persistence, SQL/Chroma filter equivalence over 300 random filters, agreement with exact search), LLM fallback and quota logic, API contract (SSE) |
 
 ## API
 
