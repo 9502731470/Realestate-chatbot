@@ -1,0 +1,29 @@
+services:
+  assistant:
+    build:
+      context: .
+      args:
+        INGEST_AT_BUILD: "1"
+        # Read from .env, so the baked index always matches the runtime model.
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+        ENABLE_DENSE: ${ENABLE_DENSE:-true}
+        VECTOR_BACKEND: ${VECTOR_BACKEND:-chroma}
+    image: dg-wasalt-assistant:latest
+    ports:
+      - "7860:7860"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      INGEST_ON_STARTUP: if-stale
+      REFRESH_INTERVAL_HOURS: "24"
+    volumes:
+      # Persist snapshots/indexes across restarts (seeded from the image on first run).
+      - assistant-data:/home/user/app/data
+    restart: unless-stopped
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  assistant-data:

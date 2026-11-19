@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Property Assistant · DarGlobal & Wasalt Real Estate AI</title>
+  <meta name="description" content="AI concierge for Wasalt property listings and DarGlobal luxury real estate. Discover villas, apartments, prices, and investment opportunities in Saudi Arabia and the UAE.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#090d16" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/fonts/readex-pro-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip" href="#composer-input">Skip to the question box</a>
+
+  <!-- App Header / Masthead -->
+  <header class="masthead">
+    <div class="masthead__inner">
+      <div class="brand">
+        <div class="brand__icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
+            <rect width="32" height="32" rx="8" fill="url(#brand-grad)"/>
+            <path d="M7 25V16l9-7 9 7v9h-6v-6h-6v6H7z" fill="#ffffff"/>
+            <path d="M16 6l-9 7h3v12h4v-6h4v6h4V13h3L16 6z" fill="url(#gold-grad)"/>
+            <defs>
+              <linearGradient id="brand-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0d9488"/>
+                <stop offset="1" stop-color="#0f172a"/>
+              </linearGradient>
+              <linearGradient id="gold-grad" x1="7" y1="6" x2="25" y2="25" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#f59e0b"/>
+                <stop offset="1" stop-color="#d97706"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand__titles">
+          <span class="brand__name">Property Assistant</span>
+          <span class="brand__sub">DarGlobal & Wasalt AI Copilot</span>
+        </div>
+      </div>
+
+      <div class="masthead__actions">
+        <!-- Live Status Pill (opens stats modal) -->
+        <button type="button" class="status-pill" id="status-toggle" aria-haspopup="dialog" aria-expanded="false" title="View data coverage and system status">
+          <span class="status-pill__dot" aria-hidden="true"></span>
+          <span class="status-pill__label" id="freshness">Loading market data…</span>
+        </button>
+
+        <!-- Language switch -->
+        <button type="button" class="btn-ghost" id="lang-toggle" title="Switch language / تغيير اللغة" aria-label="Switch language">
+          <span class="lang-text" id="lang-label">عربي</span>
+        </button>
+
+        <!-- New Chat button -->
+        <button type="button" class="btn-primary-subtle" id="new-chat" title="Start a fresh conversation">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span class="new-chat__text">New Chat</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Chat Container -->
+  <main class="chat" id="chat" aria-live="polite" aria-busy="false">
+    <!-- Welcome Screen / Empty State -->
+    <section class="welcome" id="welcome">
+      <div class="welcome__hero">
+        <div class="welcome__badge">
+          <span class="welcome__badge-icon">✨</span>
+          <span>Verified Real Estate Knowledge Base</span>
+        </div>
+        <h1 class="welcome__title">Find your dream home or luxury investment</h1>
+        <p class="welcome__lede">
+          Explore a curated selection of Wasalt listings and DarGlobal developments. Answers cite collected pages and link to original listings or projects.
+        </p>
+
+        <!-- Fast Filter Chips -->
+        <div class="filter-chips">
+          <button type="button" class="chip" data-q="Apartments for rent in Riyadh under 80,000 SAR">
+            <span class="chip__icon">🏢</span>
+            <span>Riyadh Rentals</span>
+          </button>
+          <button type="button" class="chip" data-q="Luxury villas for sale in Jeddah">
+            <span class="chip__icon">🏡</span>
+            <span>Jeddah Villas</span>
+          </button>
+          <button type="button" class="chip" data-q="Which DarGlobal projects are in Dubai?">
+            <span class="chip__icon">✨</span>
+            <span>DarGlobal Dubai</span>
+          </button>
+          <button type="button" class="chip" data-q="What amenities does Trump Tower Jeddah have?">
+            <span class="chip__icon">🏛️</span>
+            <span>Trump Tower</span>
+          </button>
+          <button type="button" class="chip" data-q="How can expats buy real estate in Saudi Arabia?">
+            <span class="chip__icon">📑</span>
+            <span>Buying & Visa Guide</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Starters Grid -->
+      <div class="starters-section">
+        <div class="starters-column">
+          <div class="starters-column__head">
+            <span class="source-tag source-tag--wasalt">Wasalt.sa</span>
+            <h2>Saudi Arabia Listings & Rentals</h2>
+          </div>
+          <div class="starters-list">
+            <button type="button" class="starter-card" data-q="3-bedroom apartments for rent in Riyadh under 90,000 SAR">
+              <span class="starter-card__icon">📍</span>
+              <div class="starter-card__text">
+                <strong>3-bed apartments in Riyadh</strong>
+                <span>Under 90,000 SAR/year with key amenities</span>
+              </div>
+            </button>
+            <button type="button" class="starter-card" data-q="Villas for sale in Jeddah with private pool">
+              <span class="starter-card__icon">🏊</span>
+              <div class="starter-card__text">
+                <strong>Villas for sale in Jeddah</strong>
+                <span>Discover family villas with private pools</span>
+              </div>
+            </button>
+            <button type="button" class="starter-card" data-q="شقق للإيجار في شمال الرياض حي الملقا" lang="ar" dir="rtl">
+              <span class="starter-card__icon">🏙️</span>
+              <div class="starter-card__text">
+                <strong>شقق للإيجار في شمال الرياض</strong>
+                <span>حي الملقا والأحياء المجاورة بأسعار منافسة</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="starters-column">
+          <div class="starters-column__head">
+            <span class="source-tag source-tag--darglobal">DarGlobal</span>
+            <h2>Luxury Global Developments</h2>
+          </div>
+          <div class="starters-list">
+            <button type="button" class="starter-card" data-q="Which DarGlobal projects are in Dubai and what are their features?">
+              <span class="starter-card__icon">🌟</span>
+              <div class="starter-card__text">
+                <strong>DarGlobal projects in Dubai</strong>
+                <span>Pagani, Missoni, and waterfront residences</span>
+              </div>
+            </button>
+            <button type="button" class="starter-card" data-q="Tell me about Tierra Viva villas with Lamborghini in Spain">
+              <span class="starter-card__icon">🏎️</span>
+              <div class="starter-card__text">
+                <strong>Tierra Viva by Lamborghini</strong>
+                <span>Exclusive gated villas in Benahavis, Spain</span>
+              </div>
+            </button>
+            <button type="button" class="starter-card" data-q="What are the foreign investment and residency perks for Oman projects?">
+              <span class="starter-card__icon">🇴🇲</span>
+              <div class="starter-card__text">
+                <strong>AIDA Villas in Oman & Golden Visa</strong>
+                <span>100% freehold ownership and 0% personal tax</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Global Notice Banner (e.g. quota, scraper warming) -->
+    <div class="banner" id="banner" hidden></div>
+
+    <!-- Message Thread -->
+    <ol class="thread" id="thread"></ol>
+  </main>
+
+  <!-- Composer / Sticky Input Bar -->
+  <footer class="composer">
+    <div class="composer__container">
+      <form class="composer__form" id="composer" autocomplete="off">
+        <label class="visually-hidden" for="composer-input">Your property question</label>
+        <textarea id="composer-input" name="message" rows="1" maxlength="1500" placeholder="Ask about properties, rental prices, luxury projects, or locations…" required></textarea>
+        <div class="composer__buttons">
+          <button type="submit" class="send-btn" id="send" title="Send question (Enter)">
+            <svg class="send-btn__icon send-btn__icon--send" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
+            </svg>
+            <svg class="send-btn__icon send-btn__icon--stop" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="5" y="5" width="14" height="14" rx="3"></rect>
+            </svg>
+          </button>
+        </div>
+      </form>
+      <div class="composer__footer">
+        <span class="composer__note">Prices and availability change often. Confirm on live listings · Verified data from Wasalt.sa & DarGlobal</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- System Information / Stats Modal -->
+  <dialog class="stats-dialog" id="stats-dialog">
+    <div class="stats-dialog__content">
+      <div class="stats-dialog__head">
+        <div class="stats-dialog__title-wrap">
+          <span class="status-indicator"></span>
+          <h3 class="stats-dialog__title">Market Coverage & Diagnostics</h3>
+        </div>
+        <button type="button" class="stats-dialog__close" id="stats-close" aria-label="Close dialog">✕</button>
+      </div>
+      <p class="stats-dialog__desc">Answers are generated strictly from public listings and verified pages of <a href="https://wasalt.sa" target="_blank" rel="noopener">Wasalt.sa</a> and <a href="https://darglobal.co.uk" target="_blank" rel="noopener">DarGlobal.co.uk</a>.</p>
+      <dl class="stats-grid" id="about-stats"></dl>
+      <div class="stats-dialog__links">
+        <a href="/docs" target="_blank" rel="noopener" class="link-btn">📖 API Documentation</a>
+        <a href="/api/stats" target="_blank" rel="noopener" class="link-btn">📊 Raw JSON Stats</a>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Templates -->
+  <template id="tpl-user">
+    <li class="msg msg--user">
+      <div class="msg__bubble">
+        <div class="msg__body"></div>
+      </div>
+    </li>
+  </template>
+
+  <template id="tpl-assistant">
+    <li class="msg msg--assistant">
+      <div class="msg__avatar" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h1M14 10h1M9 14h1M14 14h1M9 18h1M14 18h1"/>
+        </svg>
+      </div>
+      <div class="msg__main">
+        <!-- Search filter indicator -->
+        <div class="msg__search" hidden></div>
+
+        <!-- Message Body -->
+        <div class="msg__body">
+          <div class="typing-indicator" aria-label="Thinking">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <!-- Property Cards / Sources Grid -->
+        <section class="sources" hidden>
+          <div class="sources__header">
+            <h3 class="sources__title">Recommended Properties & Sources</h3>
+            <span class="sources__count"></span>
+          </div>
+          <div class="sources__grid"></div>
+        </section>
+
+        <!-- Message Actions & Status -->
+        <div class="msg__footer">
+          <span class="msg__status"></span>
+          <div class="msg__actions">
+            <button type="button" class="action-btn copy-btn" hidden title="Copy answer to clipboard">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy</span>
+            </button>
+            <button type="button" class="action-btn retry-btn" hidden title="Retry this query">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+              </svg>
+              <span>Retry</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Suggested Follow-ups -->
+        <div class="msg__suggestions" hidden></div>
+      </div>
+    </li>
+  </template>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# Render Blueprint: free web service with semantic search (embeddings + ChromaDB).
+#
+# Deploy: render.com -> New + -> Blueprint -> pick this repository -> paste your
+# OPENROUTER_API_KEY when asked -> Apply. The first build takes ~10-20 minutes: it
+# scrapes both sites, downloads the embedding model and embeds every chunk into
+# ChromaDB, all baked into the image.
+#
+# Free plan: 512 MB RAM, 0.1 CPU, sleeps after 15 idle minutes (~1 minute to wake).
+# Render passes these variables to the Docker build as build args, so the baked
+# index and the running service always use the same embedding model.
+services:
+  - type: web
+    name: property-assistant
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/ready
+    autoDeploy: true
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false # secret: you paste it during setup; never commit it
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-small-en-v1.5 # 67 MB; fits next to ChromaDB in 512 MB
+      - key: ENABLE_DENSE
+        value: "true"
+      - key: VECTOR_BACKEND
+        value: chroma
+      - key: EMBEDDING_THREADS
+        value: "1" # 0.1 CPU: one inference thread avoids throttling
+      - key: INGEST_ON_STARTUP
+        value: if-missing # the image already contains fresh data
+      - key: REFRESH_INTERVAL_HOURS
+        value: "0" # re-embedding on 0.1 CPU would take hours; redeploy to refresh data
+      - key: REEMBED_IF_OUTDATED
+        value: "false"
+      - key: ADMIN_TOKEN
+        generateValue: true

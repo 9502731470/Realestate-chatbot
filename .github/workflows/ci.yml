@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"  # nightly: catches upstream site changes via the live smoke job
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check app tests
+      - run: pytest
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (with live ingestion)
+        run: docker build -t dg-wasalt-assistant:ci .
+      - name: Smoke test container
+        run: |
+          docker run -d --name app -p 7860:7860 dg-wasalt-assistant:ci
+          # CI has no OpenRouter key. The public deployment is checked separately
+          # with the same command without --skip-chat, to verify real AI replies.
+          for i in $(seq 1 36); do
+            if docker exec app python -m app.cli verify --url http://127.0.0.1:7860 --skip-chat; then exit 0; fi
+            sleep 5
+          done
+          docker logs app
+          exit 1
+
+  refresh-render:
+    # Optional: weekly rebuild of the Render service, so the data (scraped and embedded
+    # on Render's build machines, not on the 0.1 CPU instance) stays fresh.
+    # Enable by adding the service's Deploy Hook URL as the secret RENDER_DEPLOY_HOOK_URL.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger a Render rebuild (Mondays, or when run manually)
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then echo "RENDER_DEPLOY_HOOK_URL not set; skipping"; exit 0; fi
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%u)" != "1" ]; then echo "not Monday"; exit 0; fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null && echo "Render rebuild triggered"
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.HF_SPACE != ''
+    needs: docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install -q huggingface_hub
+          huggingface-cli upload "${{ vars.HF_SPACE }}" . . --repo-type=space \
+            --exclude ".git/*" ".github/*" "data/*" "models/*" ".venv/*" \
+            --commit-message "Deploy ${GITHUB_SHA::7}"
