@@ -38,7 +38,7 @@ from app.scraping.nextdata import (
     rich_to_text,
 )
 from app.scraping.pii import scrub_pii
-from app.textutil import clean_ws, truncate
+from app.textutil import clean_ws, normalize_for_search, truncate
 from app.vocab import (
     canonical_property_type,
     detect_brands,
@@ -102,6 +102,58 @@ def _attrs(entity: Any) -> dict[str, Any]:
 
 def _clean_title(text: str | None) -> str:
     return _TITLE_SUFFIX.sub("", clean_ws(text or "")).strip()
+
+
+_ANCHOR_HREF = re.compile(r"<a\b[^>]*?\bhref\s*=\s*[\"']([^\"'#?]+)", re.I)
+_CANONICAL_TAG = re.compile(r"<link\b[^>]*\brel\s*=\s*[\"']canonical[\"'][^>]*>", re.I)
+_HREF_VALUE = re.compile(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", re.I)
+PROJECT_SUBSECTIONS = ("one-of-one",)
+
+
+def _site_path(href: str) -> str | None:
+    """'/dg1', 'https://www.darglobal.co.uk/dg1/' -> '/dg1'; other sites -> None."""
+    parts = urlsplit(href.strip())
+    if parts.netloc and parts.netloc.lower().removeprefix("www.") != "darglobal.co.uk":
+        return None
+    path = "/" + parts.path.strip("/")
+    return path if path != "/" else None
+
+
+def project_links_from_html(html: str) -> list[str]:
+    """Project-like paths linked from the /projects page markup, in page order.
+
+    The fallback when the page ships no project cards in ``__NEXT_DATA__``: the
+    cards' links are still in the HTML, so the projects are fetched first.
+    """
+    paths: list[str] = []
+    for href in _ANCHOR_HREF.findall(html or ""):
+        path = _site_path(href)
+        if not path:
+            continue
+        segments = path.strip("/").split("/")
+        top = segments[0].lower()
+        if len(segments) == 1:
+            if top in SKIP_SLUGS or top in ARTICLE_SECTIONS:
+                continue
+        elif top not in PROJECT_SUBSECTIONS:
+            continue
+        if path not in paths:
+            paths.append(path)
+    return paths
+
+
+def canonical_page_url(html: str, fallback: str) -> str:
+    """The page's ``<link rel="canonical">`` on darglobal.co.uk, else ``fallback``.
+
+    Redirecting aliases (/Trump-International-Hotel-Tower-Dubai) serve the same
+    project as the canonical page; keying records on the canonical URL merges them.
+    """
+    tag = _CANONICAL_TAG.search((html or "")[:200_000])
+    href = _HREF_VALUE.search(tag.group(0)) if tag else None
+    path = _site_path(href.group(1)) if href else None
+    if not path or path.strip("/").split("/")[0].lower() in SKIP_SLUGS:
+        return fallback
+    return BASE + path
 
 
 # ---------------------------------------------------------------------- parsing
@@ -177,6 +229,10 @@ def parse_project_page(
         if x
     )
     city, country = parse_location(location_text)
+    if not (city or country):
+        # Campaign pages reuse the project template ("Buy Property with Crypto");
+        # every real project has a place. Such pages are kept as ordinary pages.
+        return None
     display_location = clean_ws(str(banner.get("Location") or card.get("location") or fact("Location") or ""))
 
     type_text = " ".join(
@@ -403,6 +459,31 @@ def parse_generic_page(url: str, next_data: dict[str, Any] | None, html: str) ->
     return records
 
 
+def dedupe_projects(records: dict[str, Record]) -> int:
+    """Merge project records that describe the same project under different URLs.
+
+    Same title in the same place means the same project; the copy at a lowercase
+    (canonical-looking) URL is kept, else the richer one. Returns how many were dropped.
+    """
+    kept: dict[tuple[str, str], Record] = {}
+    dropped = 0
+    for rec in sorted((r for r in records.values() if r.kind == "project"), key=lambda r: r.id):
+        key = (normalize_for_search(rec.title), normalize_for_search(rec.city or rec.country or ""))
+        other = kept.get(key)
+        if other is None:
+            kept[key] = rec
+            continue
+
+        def rank(r: Record) -> tuple[bool, int]:
+            return (_slug(r.url) != _slug(r.url).lower(), -len(r.text))
+
+        winner, loser = (other, rec) if rank(other) <= rank(rec) else (rec, other)
+        kept[key] = winner
+        records.pop(loser.id, None)
+        dropped += 1
+    return dropped
+
+
 # ---------------------------------------------------------------------- crawler
 class DarGlobalScraper:
     source = "darglobal"
@@ -464,6 +545,11 @@ class DarGlobalScraper:
             self.report.notes.append(f"stopped: {exc.reason}")
             log.warning("darglobal crawl stopped", extra={"reason": exc.reason})
             return self._finish(records)
+        if not cards and fetched:
+            links = project_links_from_html(fetched[0])
+            if links:
+                cards = {path: {} for path in links}
+                self.report.notes.append(f"/projects: {len(links)} project links read from the page HTML")
         self.report.notes.append(f"{len(cards)} project cards, {len(paths)} sitemap URLs")
 
         root_paths = [p for p in paths if p.count("/") == 1 and p.strip("/").lower() not in SKIP_SLUGS and p != "/"]
@@ -478,9 +564,11 @@ class DarGlobalScraper:
                 return
             html, nd = fetched
             url = BASE + (path if path != "/" else "")
-            project = parse_project_page(url, nd or {}, html, cards.get(path)) if nd else None
+            project = (
+                parse_project_page(canonical_page_url(html, url), nd or {}, html, cards.get(path)) if nd else None
+            )
             if project:
-                records[project.id] = project
+                records[project.id] = project  # aliases of one page share its canonical id
                 return
             for rec in parse_generic_page(url, nd, html):
                 records.setdefault(rec.id, rec)
@@ -509,6 +597,9 @@ class DarGlobalScraper:
         return self._finish(records)
 
     def _finish(self, records: dict[str, Record]) -> tuple[list[Record], CrawlReport]:
+        merged = dedupe_projects(records)
+        if merged:
+            self.report.notes.append(f"merged {merged} duplicate project pages")
         kinds = Counter(r.kind for r in records.values())
         self.report.notes.append("records: " + ", ".join(f"{k}={v}" for k, v in kinds.most_common()))
         if self.skipped:

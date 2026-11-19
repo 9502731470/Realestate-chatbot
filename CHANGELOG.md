@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.3.3 — Fixes from testing the live deployment
+
+- **City names mistaken for districts.** "Riyadh" also matched a district called Al-Riyadh in Jeddah, so
+  "apartments for rent in Riyadh" (a homepage example) returned one Jeddah flat instead of the Riyadh listings;
+  "Khobar" matched a district of Madinah, "Jubail" and "Dhahran" districts inside those cities. A district that
+  shares a city's name now only counts when its own city is named too ("Al-Riyadh district, Jeddah").
+- **Wasalt city spellings.** Wasalt writes Aldammam, Alttayif, Bariduh, Hayil, Tbwk, Earear, Eanizah, Alzahran…,
+  so searches for Dammam, Taif, Buraydah, Hail, Tabuk, Arar, Unaizah or Dhahran found nothing. These spellings are
+  now aliases (plus Abqaiq, Hafar Al Batin, Al Khafji, Rabigh and other towns found in the data) and listings are
+  stored under the standard name. Wasalt project URLs keep Wasalt's own spelling.
+- **Villas stored as townhouses.** Wasalt files villas under the slug `villa-townhouse`; the scraper read the slug
+  first, so all villas became townhouses and villa searches returned nothing. The listing's label now decides.
+- **Missing DarGlobal projects.** When `/projects` ships no project data, the crawler took the first 40 paths of
+  the alphabetical sitemap, which cut off Pagani, Missoni, W Residences, The Astera and Marea. It now reads the
+  project links in the page's HTML first, and fetches up to 100 top-level pages (`DG_MAX_PAGES`).
+- **Duplicate and false DarGlobal projects.** Project records are keyed on the page's canonical URL, so a
+  redirecting alias no longer duplicates a project, and same-name projects in the same place are merged. Pages
+  with no location (e.g. "Buy Property with Crypto") are kept as pages, not projects.
+- 47 new tests (227 in total). Each bug above has tests that fail on the previous code.
+
 ## 1.3.2 — Fix: compressed responses crashed the crawler
 
 - Real servers send pages gzip-compressed. The crawler decompressed them while reading, then handed the copy on

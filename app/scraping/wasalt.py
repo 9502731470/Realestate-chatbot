@@ -35,7 +35,7 @@ from app.scraping.http import (
 from app.scraping.nextdata import extract_next_data, html_to_text, page_props
 from app.scraping.pii import scrub_pii
 from app.textutil import clean_ws, truncate
-from app.vocab import COMMERCIAL_TYPES, TYPE_LABELS, canonical_property_type, find_places
+from app.vocab import COMMERCIAL_TYPES, TYPE_LABELS, canonical_city, canonical_property_type, find_places
 
 log = logging.getLogger(__name__)
 
@@ -202,10 +202,12 @@ def parse_listing(item: dict[str, Any]) -> Record | None:
     else:
         price, period = _rent(info)
     subtype = info.get("propertySubType")
-    ptype = canonical_property_type(info.get("propertySubTypeSlug") or subtype)
+    # The human label decides: Wasalt files villas under the slug "villa-townhouse",
+    # so reading the slug first would turn every villa into a townhouse.
+    ptype = canonical_property_type(subtype) or canonical_property_type(info.get("propertySubTypeSlug"))
     main = str(info.get("propertyMainType") or "").lower()
     category = main if main in ("residential", "commercial") else ("commercial" if ptype in COMMERCIAL_TYPES else None)
-    city, district = info.get("city"), info.get("district")
+    city, district = canonical_city(info.get("city")), info.get("district")
     area = _to_float(attrs.get("builtUpArea")) or _to_float(item.get("floorSize")) or _to_float(
         attrs.get("landArea") or attrs.get("plotArea") or attrs.get("totalArea")
     )
@@ -299,16 +301,23 @@ def parse_project_item(item: dict[str, Any]) -> Record | None:
     pid, slug = item.get("id"), info.get("slug")
     if not pid or not slug:
         return None
-    city = info.get("city")
+    raw_city = info.get("city")  # Wasalt's own spelling: part of the project's URL
+    city = canonical_city(raw_city)
     types = [
-        t for t in (canonical_property_type(u.get("slug") or u.get("name")) for u in info.get("unitTypes") or [] if isinstance(u, dict)) if t
+        t
+        for t in (
+            canonical_property_type(u.get("name")) or canonical_property_type(u.get("slug"))
+            for u in info.get("unitTypes") or []
+            if isinstance(u, dict)
+        )
+        if t
     ]
     units = item.get("unitsAvailable") or {}
     rec = Record(
         id=f"wasalt:project:{pid}",
         source="wasalt",
         kind="project",
-        url=f"{BASE}/en/project/{(city or 'Saudi-Arabia').replace(' ', '-')}/{slug}",
+        url=f"{BASE}/en/project/{(raw_city or 'Saudi-Arabia').replace(' ', '-')}/{slug}",
         title=clean_ws(info.get("title") or slug.replace("-", " ").title()),
         purpose=info.get("propertyFor") if info.get("propertyFor") in ("sale", "rent") else "sale",
         property_type=types[0] if types else None,

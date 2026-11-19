@@ -23,6 +23,8 @@ from app.vocab import (
     MULTIPLIERS,
     PROPERTY_TYPES,
     TYPE_LABELS,
+    canonical_city,
+    city_alias_keys,
     city_country,
     detect_currency,
     find_places,
@@ -372,6 +374,11 @@ class QueryParser:
     def _districts(self, norm: str, f: QueryFilters) -> None:
         if not self.vocab.districts:
             return
+        # Some districts carry a city's name: "Al-Riyadh" is a district of Jeddah,
+        # "Al Khobar" one of Madinah, "Al Jubail" one of Jubail. When the words were
+        # already read as a city, they mean that city, unless the district's own
+        # city is named as well ("Al-Riyadh district, Jeddah").
+        city_words = {key: city for city in f.cities for key in city_alias_keys(city)}
         tokens = norm.split()
         found: list[str] = []
         for size in (4, 3, 2, 1):
@@ -380,10 +387,18 @@ class QueryParser:
                 if len(key) < 4:
                     continue
                 hit = self.vocab.districts.get(key)
-                if hit and hit[0] not in found:
-                    found.append(hit[0])
-                    if hit[1] and hit[1] not in f.cities:
-                        f.cities.append(hit[1])
+                if not hit or hit[0] in found:
+                    continue
+                name, district_city = hit[0], canonical_city(hit[1])
+                named_city = city_words.get(key)
+                if named_city:
+                    others = [c for c in f.cities if c != named_city]
+                    if not district_city or district_city not in others:
+                        continue  # "Riyadh" means the city of Riyadh
+                    f.cities.remove(named_city)  # the words named the district, not a second city
+                found.append(name)
+                if district_city and district_city not in f.cities:
+                    f.cities.append(district_city)
         f.districts = found[:3]
 
     # ------------------------------------------------------------------ main

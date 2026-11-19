@@ -95,15 +95,18 @@ CITIES: dict[str, tuple[str, list[str]]] = {
     "Jeddah": ("Saudi Arabia", ["jeddah", "jedda", "jiddah", "jidda", "jedah", "جده"]),
     "Makkah": ("Saudi Arabia", ["makkah", "mecca", "makka", "makkah al mukarramah", "مكه", "مكه المكرمه"]),
     "Madinah": ("Saudi Arabia", ["madinah", "medina", "madina", "al madinah", "al madinah al munawwarah", "المدينه", "المدينه المنوره"]),
-    "Dammam": ("Saudi Arabia", ["dammam", "ad dammam", "al dammam", "الدمام"]),
+    # Wasalt spells many city names its own way ("Aldammam", "Alttayif", "Bariduh",
+    # "Hayil", "Tbwk", "Earear", "Eanizah", "Alzahran"); those spellings are aliases
+    # here, so stored listings and users' questions meet on the same canonical name.
+    "Dammam": ("Saudi Arabia", ["dammam", "ad dammam", "al dammam", "aldammam", "الدمام"]),
     "Al Khobar": ("Saudi Arabia", ["al khobar", "khobar", "al-khobar", "alkhobar", "الخبر"]),
-    "Dhahran": ("Saudi Arabia", ["dhahran", "الظهران"]),
-    "Taif": ("Saudi Arabia", ["taif", "at taif", "al taif", "الطائف"]),
+    "Dhahran": ("Saudi Arabia", ["dhahran", "alzahran", "al zahran", "aldhahran", "الظهران"]),
+    "Taif": ("Saudi Arabia", ["taif", "at taif", "al taif", "alttayif", "altaif", "tayif", "الطائف"]),
     "Abha": ("Saudi Arabia", ["abha", "ابها"]),
     "Khamis Mushait": ("Saudi Arabia", ["khamis mushait", "khamis mushayt", "خميس مشيط"]),
-    "Buraidah": ("Saudi Arabia", ["buraidah", "buraydah", "buraida", "بريده"]),
-    "Tabuk": ("Saudi Arabia", ["tabuk", "تبوك"]),
-    "Hail": ("Saudi Arabia", ["hail", "ha il", "حائل"]),
+    "Buraidah": ("Saudi Arabia", ["buraidah", "buraydah", "buraida", "burayda", "bariduh", "بريده"]),
+    "Tabuk": ("Saudi Arabia", ["tabuk", "tbwk", "تبوك"]),
+    "Hail": ("Saudi Arabia", ["hail", "ha il", "hayil", "hayel", "حائل"]),
     "Jazan": ("Saudi Arabia", ["jazan", "jizan", "gizan", "جازان", "جيزان"]),
     "Najran": ("Saudi Arabia", ["najran", "نجران"]),
     "Al Ahsa": ("Saudi Arabia", ["al ahsa", "al hasa", "ahsa", "hofuf", "al hofuf", "الاحساء", "الهفوف"]),
@@ -111,7 +114,18 @@ CITIES: dict[str, tuple[str, list[str]]] = {
     "Yanbu": ("Saudi Arabia", ["yanbu", "ينبع"]),
     "Al Kharj": ("Saudi Arabia", ["al kharj", "kharj", "الخرج"]),
     "Qatif": ("Saudi Arabia", ["qatif", "al qatif", "القطيف"]),
-    "Unaizah": ("Saudi Arabia", ["unaizah", "onaizah", "عنيزه"]),
+    "Unaizah": ("Saudi Arabia", ["unaizah", "onaizah", "unayzah", "eanizah", "عنيزه"]),
+    "Arar": ("Saudi Arabia", ["arar", "earear", "عرعر"]),
+    "Abqaiq": ("Saudi Arabia", ["abqaiq", "buqayq", "بقيق", "ابقيق"]),
+    "Hafar Al Batin": ("Saudi Arabia", ["hafar al batin", "hafr al batin", "hafr albatin", "حفر الباطن"]),
+    "Al Khafji": ("Saudi Arabia", ["al khafji", "khafji", "alkhafji", "الخفجي"]),
+    "Rabigh": ("Saudi Arabia", ["rabigh", "رابغ"]),
+    "Al Zulfi": ("Saudi Arabia", ["al zulfi", "zulfi", "alzulfi", "الزلفي"]),
+    "Ar Rass": ("Saudi Arabia", ["ar rass", "al rass", "alrass", "الرس"]),
+    "Al Muzahimiyah": ("Saudi Arabia", ["al muzahimiyah", "muzahimiyah", "almuzahimih", "المزاحميه"]),
+    "Turabah": ("Saudi Arabia", ["turabah", "turba", "تربه"]),
+    "Hotat Bani Tamim": ("Saudi Arabia", ["hotat bani tamim", "hawtat bani tamim", "حوطه بني تميم"]),
+    "King Abdullah Economic City": ("Saudi Arabia", ["king abdullah economic city", "kaec"]),
     "AlUla": ("Saudi Arabia", ["alula", "al ula", "العلا"]),
     "Diriyah": ("Saudi Arabia", ["diriyah", "ad diriyah", "al diriyah", "الدرعيه"]),
     "Wadi Safar": ("Saudi Arabia", ["wadi safar", "وادي صفار"]),
@@ -170,6 +184,26 @@ def find_places(text: str | None) -> tuple[list[str], list[str]]:
         if canonical not in bucket:
             bucket.append(canonical)
     return cities, countries
+
+
+_CITY_BY_ALIAS: dict[str, str] = {alias: canonical for alias, canonical, kind in _ALIASES if kind == "city"}
+
+
+def canonical_city(name: str | None) -> str | None:
+    """Standard spelling of a city name ("Aldammam" -> "Dammam", "Khobar" -> "Al Khobar").
+
+    Only a whole-name match counts, so a longer place name that merely contains a
+    city ("King Fahd Road, Riyadh") is never collapsed; unknown names come back unchanged.
+    """
+    if not name:
+        return name
+    return _CITY_BY_ALIAS.get(normalize_for_search(name.replace("-", " ")), name)
+
+
+def city_alias_keys(city: str) -> set[str]:
+    """Every ``place_key`` a canonical city answers to, e.g. {"riyadh", "riyad", "رياض", ...}."""
+    _country, aliases = CITIES.get(city, ("", []))
+    return {key for key in (place_key(a) for a in (city, *aliases)) if key}
 
 
 def parse_location(text: str | None) -> tuple[str | None, str | None]:

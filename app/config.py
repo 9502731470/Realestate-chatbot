@@ -135,7 +135,10 @@ class Settings(BaseSettings):
 
     sources: ListStr = Field(default_factory=lambda: ["darglobal", "wasalt"])
     dg_max_articles: int = 120
-    dg_max_pages: int = 40
+    # Top-level DarGlobal pages fetched besides the /projects cards. The sitemap is
+    # alphabetical with ~70 top-level paths, and project pages sit near its end, so
+    # a cap of 40 silently dropped Pagani, Missoni, W Residences, The Astera...
+    dg_max_pages: int = 100
     wasalt_max_category_pages: int = 120
     wasalt_max_detail_pages: int = 40
     wasalt_max_project_pages: int = 30
